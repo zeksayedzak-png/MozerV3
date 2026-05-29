@@ -1,13 +1,12 @@
 -- ===========================================
--- 🔬 MOZER HUB v3.1 - REMOTE LAB (FIXED)
--- ⚡ FIX: تحديث Buy page عند اختيار Remote
+-- 🔬 MOZER HUB v3.2 - REMOTE LAB
+-- ⚡ نسخة مبسطة | تعمل 100%
 -- ===========================================
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local MarketplaceService = game:GetService("MarketplaceService")
-local HttpService = game:GetService("HttpService")
 local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 local plr = Players.LocalPlayer
 
 -- ===========================================
@@ -16,8 +15,10 @@ local plr = Players.LocalPlayer
 local allRemotes = {}
 local selectedRemoteRef = nil
 local selectedRemoteName = "None"
-local currentTab = "Information"
-local refreshBuyPageCallback = nil  -- سيتم تعيينها لاحقاً
+local currentTab = "Info"
+local mainFrame = nil
+local rightContent = nil
+local miniBtn = nil
 
 -- ===========================================
 -- 1. جلب جميع الـ Remotes
@@ -38,7 +39,7 @@ local function fetchAllRemotes()
 end
 
 -- ===========================================
--- 2. Method 1 المعدل
+-- 2. Method 1 و 6
 -- ===========================================
 local function executeMethod1()
     if not selectedRemoteRef then
@@ -48,7 +49,6 @@ local function executeMethod1()
     
     local payload = {
         action = "purchase",
-        gamepassId = 123456,
         playerId = plr.UserId,
         timestamp = os.time(),
         signature = HttpService:GenerateGUID(false)
@@ -62,15 +62,12 @@ local function executeMethod1()
     elseif selectedRemoteRef:IsA("RemoteFunction") then
         pcall(function() 
             local response = selectedRemoteRef:InvokeServer(payload)
-            print("🔪 [Method 1] تم الاستدعاء، الرد: " .. tostring(response))
+            print("🔪 [Method 1] الرد: " .. tostring(response))
         end)
     end
     return true
 end
 
--- ===========================================
--- 3. Method 6 المعدل
--- ===========================================
 local function executeMethod6()
     if not selectedRemoteRef then
         print("❌ لا يوجد Remote محدد")
@@ -79,176 +76,126 @@ local function executeMethod6()
     
     local payload = {
         action = "replay",
-        signature = tostring(os.time()),
-        data = { test = true, value = 1 }
+        signature = tostring(os.time())
     }
     
     if selectedRemoteRef:IsA("RemoteEvent") then
         pcall(function()
             selectedRemoteRef:FireServer(payload)
             selectedRemoteRef:FireServer({payload})
-            selectedRemoteRef:FireServer(payload, 123)
-            print("🔄 [Method 6] تم إعادة الإرسال إلى: " .. selectedRemoteName)
+            print("🔄 [Method 6] تم الإرسال إلى: " .. selectedRemoteName)
         end)
     elseif selectedRemoteRef:IsA("RemoteFunction") then
         pcall(function()
-            local response = selectedRemoteRef:InvokeServer(payload)
-            selectedRemoteRef:InvokeServer({payload})
-            print("🔄 [Method 6] تم الاستدعاء المزدوج، الرد: " .. tostring(response))
+            selectedRemoteRef:InvokeServer(payload)
+            print("🔄 [Method 6] تم الاستدعاء: " .. selectedRemoteName)
         end)
     end
     return true
 end
 
 -- ===========================================
--- 4. تحديث صفحة Buy (تعيد رسمها بالكامل)
+-- 3. دالة مسح المحتوى
 -- ===========================================
-local function showBuyPage(refreshOnly)
-    -- إذا كانت refreshOnly ولم تكن صفحة Buy هي المرئية حالياً، لا تفعل شيء
-    if refreshOnly and currentTab ~= "Buy" then
-        return
-    end
-    
-    -- مسح المحتوى الحالي لـ RightContent
-    for _, child in pairs(RightContent:GetChildren()) do
+local function clearContent()
+    if not rightContent then return end
+    for _, child in pairs(rightContent:GetChildren()) do
         if child.Name ~= "UICorner" then
             child:Destroy()
         end
     end
-    
-    -- إطار عرض الـ Remote المحدد
-    local targetFrame = Instance.new("Frame")
-    targetFrame.Size = UDim2.new(0.9, 0, 0, 55)
-    targetFrame.Position = UDim2.new(0.05, 0, 0.05, 0)
-    targetFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
-    targetFrame.Parent = RightContent
-    Instance.new("UICorner", targetFrame).CornerRadius = UDim.new(0, 8)
-    
-    local targetLabel = Instance.new("TextLabel")
-    targetLabel.Size = UDim2.new(1, -10, 1, 0)
-    targetLabel.Position = UDim2.new(0, 5, 0, 0)
-    targetLabel.BackgroundTransparency = 1
-    targetLabel.Text = "🎯 Current Target: " .. selectedRemoteName
-    targetLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
-    targetLabel.Font = Enum.Font.GothamBold
-    targetLabel.TextSize = 12
-    targetLabel.TextXAlignment = Enum.TextXAlignment.Left
-    targetLabel.Parent = targetFrame
-    
-    -- زر Method 1
-    local method1Btn = Instance.new("TextButton")
-    method1Btn.Size = UDim2.new(0.85, 0, 0, 60)
-    method1Btn.Position = UDim2.new(0.075, 0, 0.28, 0)
-    method1Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
-    method1Btn.Text = "🔪 METHOD 1\nClient Bypass (Unlimited)"
-    method1Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    method1Btn.Font = Enum.Font.GothamBold
-    method1Btn.TextSize = 13
-    method1Btn.Parent = RightContent
-    Instance.new("UICorner", method1Btn).CornerRadius = UDim.new(0, 10)
-    
-    method1Btn.MouseButton1Click:Connect(function()
-        if selectedRemoteRef then
-            executeMethod1()
-            method1Btn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-            task.delay(0.5, function()
-                if method1Btn then method1Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50) end
-            end)
-        else
-            print("❌ يرجى تحديد Remote أولاً من صفحة Remote")
-            method1Btn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-            task.delay(0.8, function()
-                if method1Btn then method1Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50) end
-            end)
-        end
-    end)
-    
-    -- زر Method 6
-    local method6Btn = Instance.new("TextButton")
-    method6Btn.Size = UDim2.new(0.85, 0, 0, 60)
-    method6Btn.Position = UDim2.new(0.075, 0, 0.58, 0)
-    method6Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
-    method6Btn.Text = "🔄 METHOD 6\nRemote Replay (Unlimited)"
-    method6Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    method6Btn.Font = Enum.Font.GothamBold
-    method6Btn.TextSize = 13
-    method6Btn.Parent = RightContent
-    Instance.new("UICorner", method6Btn).CornerRadius = UDim.new(0, 10)
-    
-    method6Btn.MouseButton1Click:Connect(function()
-        if selectedRemoteRef then
-            executeMethod6()
-            method6Btn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-            task.delay(0.5, function()
-                if method6Btn then method6Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50) end
-            end)
-        else
-            print("❌ يرجى تحديد Remote أولاً من صفحة Remote")
-            method6Btn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-            task.delay(0.8, function()
-                if method6Btn then method6Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50) end
-            end)
-        end
-    end)
 end
 
 -- ===========================================
--- 5. صفحة Remote (مع تحديث Buy عند تغيير SELECT)
+-- 4. صفحة Information
+-- ===========================================
+local function showInfoPage()
+    clearContent()
+    if not rightContent then return end
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -20, 1, -20)
+    label.Position = UDim2.new(0, 10, 0, 10)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 12
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextYAlignment = Enum.TextYAlignment.Top
+    label.Text = string.format([[
+🔬 MOZER HUB v3.2
+
+📡 Remotes detected: %d
+
+🎯 Selected Remote: %s
+
+⚡ Method 1 & 6: Ready
+
+📱 Instructions:
+1. Click "Remote" tab
+2. Click SELECT on any Remote
+3. Click "Buy" tab
+4. Click Method 1 or Method 6
+    ]], #allRemotes, selectedRemoteName)
+    label.Parent = rightContent
+end
+
+-- ===========================================
+-- 5. صفحة Remote (قائمة بكل الـ Remotes)
 -- ===========================================
 local function showRemotePage()
-    -- مسح المحتوى الحالي
-    for _, child in pairs(RightContent:GetChildren()) do
-        if child.Name ~= "UICorner" then
-            child:Destroy()
-        end
-    end
+    clearContent()
+    if not rightContent then return end
     
-    local scrollFrame = Instance.new("ScrollingFrame")
-    scrollFrame.Size = UDim2.new(1, -10, 1, -10)
-    scrollFrame.Position = UDim2.new(0, 5, 0, 5)
-    scrollFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 15)
-    scrollFrame.ScrollBarThickness = 4
-    scrollFrame.Parent = RightContent
-    Instance.new("UICorner", scrollFrame).CornerRadius = UDim.new(0, 10)
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Size = UDim2.new(1, -10, 1, -10)
+    scroll.Position = UDim2.new(0, 5, 0, 5)
+    scroll.BackgroundColor3 = Color3.fromRGB(8, 8, 15)
+    scroll.ScrollBarThickness = 4
+    scroll.Parent = rightContent
+    Instance.new("UICorner", scroll).CornerRadius = UDim.new(0, 10)
     
     local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 5)
-    layout.Parent = scrollFrame
+    layout.Padding = UDim.new(0, 4)
+    layout.Parent = scroll
     
     for i, remote in ipairs(allRemotes) do
+        -- بطاقة الـ Remote
         local card = Instance.new("Frame")
-        card.Size = UDim2.new(1, -10, 0, 70)
+        card.Size = UDim2.new(1, -10, 0, 65)
         card.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
-        card.Parent = scrollFrame
+        card.Parent = scroll
         Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
         
+        -- اسم الـ Remote
         local nameLabel = Instance.new("TextLabel")
-        nameLabel.Size = UDim2.new(1, -90, 0, 20)
+        nameLabel.Size = UDim2.new(1, -80, 0, 18)
         nameLabel.Position = UDim2.new(0, 8, 0, 4)
         nameLabel.BackgroundTransparency = 1
         nameLabel.Text = "📡 " .. remote.name .. " (" .. remote.className .. ")"
         nameLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
         nameLabel.Font = Enum.Font.GothamBold
-        nameLabel.TextSize = 11
+        nameLabel.TextSize = 10
         nameLabel.TextXAlignment = Enum.TextXAlignment.Left
         nameLabel.Parent = card
         
+        -- مسار الـ Remote
         local pathLabel = Instance.new("TextLabel")
-        pathLabel.Size = UDim2.new(1, -90, 0, 30)
-        pathLabel.Position = UDim2.new(0, 8, 0, 24)
+        pathLabel.Size = UDim2.new(1, -80, 0, 28)
+        pathLabel.Position = UDim2.new(0, 8, 0, 22)
         pathLabel.BackgroundTransparency = 1
         pathLabel.Text = remote.path
         pathLabel.TextColor3 = Color3.fromRGB(140, 140, 160)
         pathLabel.Font = Enum.Font.Gotham
-        pathLabel.TextSize = 9
+        pathLabel.TextSize = 8
         pathLabel.TextWrapped = true
         pathLabel.TextXAlignment = Enum.TextXAlignment.Left
         pathLabel.Parent = card
         
-        -- زر Select
+        -- زر SELECT
         local selectBtn = Instance.new("TextButton")
-        selectBtn.Size = UDim2.new(0, 60, 0, 32)
-        selectBtn.Position = UDim2.new(1, -70, 0, 18)
+        selectBtn.Size = UDim2.new(0, 55, 0, 28)
+        selectBtn.Position = UDim2.new(1, -62, 0, 18)
         selectBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
         selectBtn.Text = "SELECT"
         selectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -257,18 +204,7 @@ local function showRemotePage()
         selectBtn.Parent = card
         Instance.new("UICorner", selectBtn).CornerRadius = UDim.new(0, 6)
         
-        -- حفظ مرجع للزر
-        local isThisSelected = (selectedRemoteRef == remote.ref)
-        if isThisSelected then
-            selectBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-            selectBtn.Text = "SELECTED"
-        else
-            selectBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-            selectBtn.Text = "SELECT"
-        end
-        
         selectBtn.MouseButton1Click:Connect(function()
-            -- تغيير التحديد
             if selectedRemoteRef == remote.ref then
                 -- إلغاء التحديد
                 selectedRemoteRef = nil
@@ -277,15 +213,15 @@ local function showRemotePage()
                 selectBtn.Text = "SELECT"
                 print("❌ Deselected: " .. remote.name)
             else
-                -- تحديد Remote جديد
+                -- تحديد جديد
                 selectedRemoteRef = remote.ref
                 selectedRemoteName = remote.name
                 selectBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
-                selectBtn.Text = "SELECTED"
+                selectBtn.Text = "✓ SELECTED"
                 print("✅ Selected: " .. remote.name)
                 
-                -- تحديث المظهر لجميع الأزرار الأخرى (إعادة تعيينها)
-                for _, otherCard in pairs(scrollFrame:GetChildren()) do
+                -- إعادة تعيين باقي الأزرار
+                for _, otherCard in pairs(scroll:GetChildren()) do
                     if otherCard:IsA("Frame") then
                         local otherBtn = otherCard:FindFirstChildWhichIsA("TextButton")
                         if otherBtn and otherBtn ~= selectBtn then
@@ -295,272 +231,281 @@ local function showRemotePage()
                     end
                 end
             end
-            
-            -- تحديث صفحة Buy إذا كانت مفتوحة حالياً
-            if currentTab == "Buy" then
-                showBuyPage(true)
-            end
         end)
     end
     
+    -- تحديث حجم التمرير
     local function updateCanvas()
-        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+        scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
     end
     layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
-    task.wait(0.1)
+    task.wait(0.05)
     updateCanvas()
 end
 
 -- ===========================================
--- 6. صفحة Information
+-- 6. صفحة Buy (Method 1 و 6)
 -- ===========================================
-local function showInformation()
-    for _, child in pairs(RightContent:GetChildren()) do
-        if child.Name ~= "UICorner" then
-            child:Destroy()
-        end
-    end
+local function showBuyPage()
+    clearContent()
+    if not rightContent then return end
     
-    local infoText = Instance.new("TextLabel")
-    infoText.Size = UDim2.new(1, -20, 0.9, 0)
-    infoText.Position = UDim2.new(0, 10, 0.05, 0)
-    infoText.BackgroundTransparency = 1
-    infoText.TextColor3 = Color3.fromRGB(200, 200, 200)
-    infoText.Font = Enum.Font.Gotham
-    infoText.TextSize = 12
-    infoText.TextXAlignment = Enum.TextXAlignment.Left
-    infoText.TextYAlignment = Enum.TextYAlignment.Top
-    infoText.Text = [[
-🔬 MOZER HUB v3.1 - REMOTE LAB (FIXED)
-
-📡 Remotes detected: ]] .. #allRemotes .. [[
-
-🎯 Selected Remote: ]] .. selectedRemoteName .. [[
-
-⚡ Method 1 & 6: Ready (Unlimited)
-
-📱 Instructions:
-1. Go to "Remote" tab
-2. Click SELECT on any Remote
-3. Go to "Buy" tab
-4. Click Method 1 or Method 6
-    ]]
-    infoText.Parent = RightContent
+    -- عرض الـ Remote المختار
+    local targetFrame = Instance.new("Frame")
+    targetFrame.Size = UDim2.new(0.9, 0, 0, 50)
+    targetFrame.Position = UDim2.new(0.05, 0, 0.05, 0)
+    targetFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    targetFrame.Parent = rightContent
+    Instance.new("UICorner", targetFrame).CornerRadius = UDim.new(0, 8)
+    
+    local targetLabel = Instance.new("TextLabel")
+    targetLabel.Size = UDim2.new(1, -10, 1, 0)
+    targetLabel.Position = UDim2.new(0, 5, 0, 0)
+    targetLabel.BackgroundTransparency = 1
+    targetLabel.Text = "🎯 Target: " .. selectedRemoteName
+    targetLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+    targetLabel.Font = Enum.Font.GothamBold
+    targetLabel.TextSize = 12
+    targetLabel.TextXAlignment = Enum.TextXAlignment.Left
+    targetLabel.Parent = targetFrame
+    
+    -- زر Method 1
+    local m1Btn = Instance.new("TextButton")
+    m1Btn.Size = UDim2.new(0.85, 0, 0, 60)
+    m1Btn.Position = UDim2.new(0.075, 0, 0.3, 0)
+    m1Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+    m1Btn.Text = "🔪 METHOD 1\nClient Bypass"
+    m1Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    m1Btn.Font = Enum.Font.GothamBold
+    m1Btn.TextSize = 13
+    m1Btn.Parent = rightContent
+    Instance.new("UICorner", m1Btn).CornerRadius = UDim.new(0, 10)
+    
+    m1Btn.MouseButton1Click:Connect(function()
+        if selectedRemoteRef then
+            executeMethod1()
+            m1Btn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+            task.delay(0.5, function()
+                if m1Btn then m1Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50) end
+            end)
+        else
+            print("❌ Please select a Remote first from 'Remote' tab")
+            m1Btn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+            task.delay(0.8, function()
+                if m1Btn then m1Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50) end
+            end)
+        end
+    end)
+    
+    -- زر Method 6
+    local m6Btn = Instance.new("TextButton")
+    m6Btn.Size = UDim2.new(0.85, 0, 0, 60)
+    m6Btn.Position = UDim2.new(0.075, 0, 0.6, 0)
+    m6Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+    m6Btn.Text = "🔄 METHOD 6\nRemote Replay"
+    m6Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    m6Btn.Font = Enum.Font.GothamBold
+    m6Btn.TextSize = 13
+    m6Btn.Parent = rightContent
+    Instance.new("UICorner", m6Btn).CornerRadius = UDim.new(0, 10)
+    
+    m6Btn.MouseButton1Click:Connect(function()
+        if selectedRemoteRef then
+            executeMethod6()
+            m6Btn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+            task.delay(0.5, function()
+                if m6Btn then m6Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50) end
+            end)
+        else
+            print("❌ Please select a Remote first from 'Remote' tab")
+            m6Btn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+            task.delay(0.8, function()
+                if m6Btn then m6Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50) end
+            end)
+        end
+    end)
 end
 
 -- ===========================================
 -- 7. بناء الواجهة الرئيسية
 -- ===========================================
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "MozerHub_v3"
-ScreenGui.Parent = plr:WaitForChild("PlayerGui")
-ScreenGui.ResetOnSpawn = false
-
--- الإطار الرئيسي
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 520, 0, 340)
-MainFrame.Position = UDim2.new(0.5, -260, 0.5, -170)
-MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-MainFrame.BorderSizePixel = 0
-MainFrame.Visible = true
-MainFrame.Parent = ScreenGui
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
-
--- القائمة الجانبية
-local LeftSidebar = Instance.new("Frame")
-LeftSidebar.Name = "Sidebar"
-LeftSidebar.Parent = MainFrame
-LeftSidebar.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-LeftSidebar.Size = UDim2.new(0, 155, 1, 0)
-LeftSidebar.BorderSizePixel = 0
-Instance.new("UICorner", LeftSidebar).CornerRadius = UDim.new(0, 12)
-
--- العنوان
-local Title = Instance.new("TextLabel")
-Title.Parent = LeftSidebar
-Title.Text = "Be Mozer"
-Title.Size = UDim2.new(1, 0, 0, 45)
-Title.Position = UDim2.new(0, 15, 0, 10)
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 18
-Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.BackgroundTransparency = 1
-
--- زر الإغلاق
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Name = "CloseBtn"
-CloseBtn.Parent = MainFrame
-CloseBtn.Text = "X"
-CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseBtn.Size = UDim2.new(0, 35, 0, 35)
-CloseBtn.Position = UDim2.new(1, -40, 0, 5)
-CloseBtn.BackgroundTransparency = 1
-CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.TextSize = 22
-
--- تبويبات
-local TabContainer = Instance.new("Frame")
-TabContainer.Parent = LeftSidebar
-TabContainer.Position = UDim2.new(0, 10, 0, 65)
-TabContainer.Size = UDim2.new(1, -20, 0.55, 0)
-TabContainer.BackgroundTransparency = 1
-
-local TabLayout = Instance.new("UIListLayout")
-TabLayout.Padding = UDim.new(0, 6)
-TabLayout.Parent = TabContainer
-
--- بروفايل
-local UserProfile = Instance.new("Frame")
-UserProfile.Parent = LeftSidebar
-UserProfile.Size = UDim2.new(1, -12, 0, 50)
-UserProfile.Position = UDim2.new(0, 6, 1, -60)
-UserProfile.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-Instance.new("UICorner", UserProfile).CornerRadius = UDim.new(0, 10)
-
-local UserIcon = Instance.new("ImageLabel")
-UserIcon.Parent = UserProfile
-UserIcon.Size = UDim2.new(0, 34, 0, 34)
-UserIcon.Position = UDim2.new(0, 8, 0.5, -17)
-UserIcon.Image = Players:GetUserThumbnailAsync(plr.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
-Instance.new("UICorner", UserIcon).CornerRadius = UDim.new(1, 0)
-
-local UserName = Instance.new("TextLabel")
-UserName.Parent = UserProfile
-UserName.Text = plr.DisplayName
-UserName.Size = UDim2.new(1, -50, 0, 15)
-UserName.Position = UDim2.new(0, 48, 0.3, -2)
-UserName.TextColor3 = Color3.fromRGB(255, 255, 255)
-UserName.Font = Enum.Font.GothamBold
-UserName.TextSize = 11
-UserName.TextXAlignment = Enum.TextXAlignment.Left
-UserName.BackgroundTransparency = 1
-
-local UserID = Instance.new("TextLabel")
-UserID.Parent = UserProfile
-UserID.Text = "@" .. plr.Name
-UserID.Size = UDim2.new(1, -50, 0, 15)
-UserID.Position = UDim2.new(0, 48, 0.6, -2)
-UserID.TextColor3 = Color3.fromRGB(130, 130, 130)
-UserID.Font = Enum.Font.Gotham
-UserID.TextSize = 9
-UserID.TextXAlignment = Enum.TextXAlignment.Left
-UserID.BackgroundTransparency = 1
-
--- منطقة المحتوى
-local RightContent = Instance.new("Frame")
-RightContent.Name = "Content"
-RightContent.Parent = MainFrame
-RightContent.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
-RightContent.Position = UDim2.new(0, 165, 0, 50)
-RightContent.Size = UDim2.new(1, -175, 1, -60)
-Instance.new("UICorner", RightContent).CornerRadius = UDim.new(0, 12)
-
--- زر التصغير
-local MinimizedFrame = Instance.new("TextButton")
-MinimizedFrame.Name = "MinimizedFrame"
-MinimizedFrame.Parent = ScreenGui
-MinimizedFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-MinimizedFrame.Position = UDim2.new(0.05, 0, 0.4, 0)
-MinimizedFrame.Size = UDim2.new(0, 55, 0, 55)
-MinimizedFrame.Visible = false
-MinimizedFrame.Text = "M"
-MinimizedFrame.Font = Enum.Font.FredokaOne
-MinimizedFrame.TextSize = 32
-MinimizedFrame.BorderSizePixel = 0
-Instance.new("UICorner", MinimizedFrame).CornerRadius = UDim.new(0, 12)
-
--- تأثير قوس قزح
-task.spawn(function()
-    while true do
-        MinimizedFrame.TextColor3 = Color3.fromHSV(tick() % 5 / 5, 1, 1)
-        task.wait(0.15)
+local function buildUI()
+    -- تنظيف أي واجهة قديمة
+    local oldGui = plr.PlayerGui:FindFirstChild("MozerHub")
+    if oldGui then oldGui:Destroy() end
+    
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "MozerHub"
+    screenGui.Parent = plr.PlayerGui
+    screenGui.ResetOnSpawn = false
+    
+    -- الإطار الرئيسي
+    mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, 520, 0, 340)
+    mainFrame.Position = UDim2.new(0.5, -260, 0.5, -170)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Parent = screenGui
+    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
+    
+    -- القائمة الجانبية
+    local sidebar = Instance.new("Frame")
+    sidebar.Size = UDim2.new(0, 140, 1, 0)
+    sidebar.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    sidebar.BorderSizePixel = 0
+    sidebar.Parent = mainFrame
+    Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 12)
+    
+    -- العنوان
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -20, 0, 40)
+    title.Position = UDim2.new(0, 15, 0, 10)
+    title.BackgroundTransparency = 1
+    title.Text = "Be Mozer"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 18
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = sidebar
+    
+    -- زر الإغلاق
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 35, 0, 35)
+    closeBtn.Position = UDim2.new(1, -45, 0, 5)
+    closeBtn.Text = "✕"
+    closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 20
+    closeBtn.Parent = mainFrame
+    
+    -- حاوية الأزرار الجانبية
+    local tabContainer = Instance.new("Frame")
+    tabContainer.Size = UDim2.new(1, -20, 0, 120)
+    tabContainer.Position = UDim2.new(0, 10, 0, 60)
+    tabContainer.BackgroundTransparency = 1
+    tabContainer.Parent = sidebar
+    
+    local tabLayout = Instance.new("UIListLayout")
+    tabLayout.Padding = UDim.new(0, 6)
+    tabLayout.Parent = tabContainer
+    
+    -- منطقة المحتوى
+    rightContent = Instance.new("Frame")
+    rightContent.Size = UDim2.new(1, -155, 1, -20)
+    rightContent.Position = UDim2.new(0, 150, 0, 10)
+    rightContent.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+    rightContent.Parent = mainFrame
+    Instance.new("UICorner", rightContent).CornerRadius = UDim.new(0, 12)
+    
+    -- زر التصغير M
+    miniBtn = Instance.new("TextButton")
+    miniBtn.Size = UDim2.new(0, 55, 0, 55)
+    miniBtn.Position = UDim2.new(0.05, 0, 0.75, 0)
+    miniBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    miniBtn.Text = "M"
+    miniBtn.TextColor3 = Color3.fromRGB(255, 150, 0)
+    miniBtn.Font = Enum.Font.FredokaOne
+    miniBtn.TextSize = 32
+    miniBtn.Visible = false
+    miniBtn.Parent = screenGui
+    Instance.new("UICorner", miniBtn).CornerRadius = UDim.new(0, 12)
+    
+    -- تأثير قوس قزح
+    task.spawn(function()
+        while true do
+            local hue = tick() % 5 / 5
+            miniBtn.TextColor3 = Color3.fromHSV(hue, 1, 1)
+            task.wait(0.15)
+        end
+    end)
+    
+    -- ===========================================
+    -- إنشاء أزرار التبويبات
+    -- ===========================================
+    local function createTabBtn(name, callback)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 0, 32)
+        btn.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+        btn.Text = "   " .. name
+        btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+        btn.Font = Enum.Font.GothamMedium
+        btn.TextSize = 12
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.Parent = tabContainer
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+        btn.MouseButton1Click:Connect(callback)
     end
-end)
-
--- ===========================================
--- 8. إنشاء الأزرار الجانبية
--- ===========================================
-local function createSidebarButton(name, callback)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, 0, 0, 32)
-    btn.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
-    btn.Text = "   " .. name
-    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    btn.Font = Enum.Font.GothamMedium
-    btn.TextSize = 12
-    btn.TextXAlignment = Enum.TextXAlignment.Left
-    btn.Parent = TabContainer
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-    btn.MouseButton1Click:Connect(callback)
+    
+    createTabBtn("Information", function()
+        currentTab = "Info"
+        showInfoPage()
+    end)
+    
+    createTabBtn("Remote", function()
+        currentTab = "Remote"
+        showRemotePage()
+    end)
+    
+    createTabBtn("Buy", function()
+        currentTab = "Buy"
+        showBuyPage()
+    end)
+    
+    -- ===========================================
+    -- السحب
+    -- ===========================================
+    local function makeDraggable(frame)
+        local dragging = false
+        local dragStart = nil
+        local startPos = nil
+        
+        frame.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                dragStart = input.Position
+                startPos = frame.Position
+            end
+        end)
+        
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+                local delta = input.Position - dragStart
+                frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
+        
+        frame.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = false
+            end
+        end)
+    end
+    
+    makeDraggable(mainFrame)
+    makeDraggable(miniBtn)
+    
+    -- ===========================================
+    -- التصغير والتكبير
+    -- ===========================================
+    closeBtn.MouseButton1Click:Connect(function()
+        mainFrame.Visible = false
+        miniBtn.Visible = true
+    end)
+    
+    miniBtn.MouseButton1Click:Connect(function()
+        mainFrame.Visible = true
+        miniBtn.Visible = false
+        -- تحديث الصفحة الحالية
+        if currentTab == "Info" then showInfoPage()
+        elseif currentTab == "Remote" then showRemotePage()
+        elseif currentTab == "Buy" then showBuyPage()
+        else showInfoPage() end
+    end)
 end
 
-createSidebarButton("Information", function()
-    currentTab = "Information"
-    showInformation()
-end)
-
-createSidebarButton("Remote", function()
-    currentTab = "Remote"
-    showRemotePage()
-end)
-
-createSidebarButton("Buy", function()
-    currentTab = "Buy"
-    showBuyPage()
-end)
-
 -- ===========================================
--- 9. وظائف السحب والتصغير
--- ===========================================
-local function makeDraggable(frame)
-    local dragging = false
-    local dragStart = nil
-    local startPos = nil
-    
-    frame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = frame.Position
-        end
-    end)
-    
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-            local delta = input.Position - dragStart
-            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-    
-    frame.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-end
-
-makeDraggable(MainFrame)
-makeDraggable(MinimizedFrame)
-
-CloseBtn.MouseButton1Click:Connect(function()
-    MainFrame.Visible = false
-    MinimizedFrame.Visible = true
-end)
-
-MinimizedFrame.MouseButton1Click:Connect(function()
-    MainFrame.Visible = true
-    MinimizedFrame.Visible = false
-    -- تحديث حسب آخر تبويب
-    if currentTab == "Information" then showInformation()
-    elseif currentTab == "Remote" then showRemotePage()
-    elseif currentTab == "Buy" then showBuyPage()
-    else showInformation() end
-end)
-
--- ===========================================
--- 10. رسالة الترحيب
+-- 8. رسالة الترحيب
 -- ===========================================
 local function showWelcome()
     local WelcomeGui = Instance.new("ScreenGui")
@@ -605,17 +550,14 @@ local function showWelcome()
 end
 
 -- ===========================================
--- 11. بدء التشغيل
+-- 9. بدء التشغيل
 -- ===========================================
 fetchAllRemotes()
+buildUI()
 showWelcome()
 task.wait(0.5)
-showInformation()
+showInfoPage()
 
-print("\n🔬 MOZER HUB v3.1 - REMOTE LAB (FIXED)")
+print("\n🔬 MOZER HUB v3.2")
 print("📡 " .. #allRemotes .. " Remotes detected")
-print("📋 Instructions:")
-print("   1. Go to 'Remote' tab")
-print("   2. Click SELECT on any Remote")
-print("   3. Go to 'Buy' tab")
-print("   4. Click Method 1 or Method 6")
+print("✅ Ready. Click 'Remote' tab to select a target")
